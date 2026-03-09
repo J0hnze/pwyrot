@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+import sys
+import os
+import argparse
+
+# Resolve real path (handles symlink execution)
+SCRIPT_PATH = os.path.realpath(__file__)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(SCRIPT_PATH), ".."))
+MODULE_DIR = os.path.join(PROJECT_ROOT, "modules")
+
+sys.path.insert(0, MODULE_DIR)
+
+from workspace import start_assessment
+from alive import alive_scan
+from enumeration import enum_domain
+from manual_recon import manual_recon
+from screenshots import screenshots_scan
+from sslscan import ssl_scan
+from dns_email import collect_dns_email
+from infra import infra_scan
+from repos import repos_scan
+from summary import summary_scan
+from helptext import show_help
+
+
+def debug_print(debug, message):
+    if debug:
+        print(f"[DEBUG] {message}")
+
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="pwyrot")
+    parser.add_argument("--debug", action="store_true", help="Enable debug output")
+
+    args, remaining = parser.parse_known_args()
+
+    if not remaining:
+        print("Usage: pwyrot <command>")
+        return
+
+    cmd = remaining[0]
+    debug = args.debug
+
+    debug_print(debug, f"project root: {PROJECT_ROOT}")
+    debug_print(debug, f"module dir: {MODULE_DIR}")
+    debug_print(debug, f"command: {cmd}")
+
+    # -------------------
+    # Help MODULE
+    # -------------------
+    if cmd == "help":
+        show_help()
+        sys.exit(0)
+
+    # -------------------
+    # START MODULE
+    # -------------------
+    if cmd == "start":
+        start_assessment()
+
+    # -------------------
+    # ENUM MODULE
+    # -------------------
+    elif cmd == "enum":
+        sub = argparse.ArgumentParser(prog="pwyrot enum")
+        sub.add_argument("-d", "--domain", required=True)
+        sub.add_argument("--include-expired", action="store_true")
+        sub.add_argument("-f", "--file")
+
+        sub_args = sub.parse_args(remaining[1:])
+
+        if sub_args.domain:
+            enum_domain(sub_args.domain,
+                        include_expired=sub_args.include_expired
+                        )
+
+        if sub_args.file:
+            with open(sub_args.file) as f:
+                for line in f:
+                    d = line.strip()
+                    if d:
+                        enum_domain(d)
+    
+    # -------------------
+    # Alive MODULE
+    # -------------------
+    elif cmd == "alive":
+        sub = argparse.ArgumentParser(prog="pwyrot alive")
+        sub.add_argument("-d", "--domain")
+        sub.add_argument("-i", "--input")
+
+        sub_args = sub.parse_args(remaining[1:])
+
+        if not sub_args.domain and not sub_args.input:
+            print("[!] Provide either -d <domain> or -i <file>")
+            return
+
+        alive_scan(
+            domain=sub_args.domain,
+            input_override=sub_args.input
+        )
+    
+    # -------------------
+    # Screenshots MODULE
+    # -------------------
+    elif cmd == "screenshots":
+        sub = argparse.ArgumentParser(prog="pwyrot screenshots")
+        sub.add_argument("-d", "--domain", required=True)
+        sub_args = sub.parse_args(remaining[1:])
+        screenshots_scan(sub_args.domain)
+
+    # -------------------
+    # SSL MODULE
+    # -------------------
+    elif cmd == "ssl":
+        sub = argparse.ArgumentParser(prog="pwyrot ssl")
+        sub.add_argument("-d", "--domain", required=True)
+        sub_args = sub.parse_args(remaining[1:])
+        ssl_scan(sub_args.domain)
+
+    # -------------------
+    # DNS MODULE
+    # -------------------
+    elif cmd == "dns":
+        sub = argparse.ArgumentParser(prog="pwyrot dns")
+        sub.add_argument("-d", "--domain")
+        sub.add_argument("-f", "--file")
+        sub_args = sub.parse_args(remaining[1:])
+
+        if sub_args.domain:
+            collect_dns_email(sub_args.domain)
+
+        if sub_args.file:
+            with open(sub_args.file) as f:
+                for line in f:
+                    d = line.strip()
+                    if d:
+                        collect_dns_email(d)
+
+    # -------------------
+    # INFRA MODULE
+    # -------------------
+    elif cmd == "infra":
+        sub = argparse.ArgumentParser(prog="pwyrot infra")
+        sub.add_argument("-d", "--domain")
+        sub.add_argument("-f", "--file")
+        sub_args = sub.parse_args(remaining[1:])
+
+        if sub_args.domain:
+            infra_scan(sub_args.domain)
+
+        if sub_args.file:
+            with open(sub_args.file) as f:
+                for line in f:
+                    d = line.strip()
+                    if d:
+                        infra_scan(d)
+
+    # -------------------
+    # Recon MODULE
+    # -------------------
+    elif cmd == "recon":
+        sub = argparse.ArgumentParser(prog="pwyrot recon")
+        sub.add_argument("-d", "--domain", required=True)
+        sub.add_argument("--open", action="store_true")
+
+        sub_args = sub.parse_args(remaining[1:])
+
+        manual_recon(
+            sub_args.domain,
+            open_browser=sub_args.open
+        )
+
+    # -------------------
+    # Repos MODULE
+    # -------------------
+    elif cmd == "repos":
+        sub = argparse.ArgumentParser(prog="pwyrot repos")
+        sub.add_argument("-d", "--domain")
+        sub.add_argument("-f", "--file")
+        sub_args = sub.parse_args(remaining[1:])
+
+        if sub_args.domain:
+            repos_scan(sub_args.domain)
+
+        if sub_args.file:
+            with open(sub_args.file) as f:
+                for line in f:
+                    d = line.strip()
+                    if d:
+                        repos_scan(d)
+
+    # -------------------
+    # Summary MODULE
+    # -------------------
+
+    elif cmd == "summary":
+        sub = argparse.ArgumentParser(prog="pwyrot summary")
+        sub.add_argument("--dir", help="Site root directory (default: current working dir)")
+        sub.add_argument("--debug", action="store_true", help="Enable debug output")
+        sub = sub.parse_args(remaining[1:])
+        summary_scan(domain=None, site_root_override=sub.dir, debug=sub.debug)
+
+    # -------------------
+    # FULL WORKFLOW
+    # -------------------
+    elif cmd == "all":
+        print("\n[!] Running full external assessment workflow")
+        print("[!] This may take some time depending on target size\n")
+
+        sub = argparse.ArgumentParser(prog="pwyrot all")
+        sub.add_argument("-d", "--domain")
+        sub.add_argument("-f", "--file")
+        sub_args = sub.parse_args(remaining[1:])
+
+        targets = []
+
+        if sub_args.domain:
+            targets.append(sub_args.domain)
+
+        if sub_args.file:
+            with open(sub_args.file) as f:
+                targets.extend([x.strip() for x in f if x.strip()])
+
+        if not targets:
+            print("Provide -d <domain> or -f <file>")
+            return
+
+        # Run workspace setup once
+
+        for domain in targets:
+            print(f"\n[+] Processing {domain}")
+
+            print("[+] Enumeration module")
+            enum_domain(domain)
+
+            print("[+] Alive module")
+            alive_scan(domain)
+
+            print("[+] Screenshots module")
+            screenshots_scan(domain)
+
+            print("[+] SSL module")
+            ssl_scan(domain)
+
+            print("[+] DNS module")
+            collect_dns_email(domain)
+
+            print("[+] Infra module")
+            infra_scan(domain)
+
+            print("[+] Repo module")
+            repos_scan(domain)
+
+            print("[+] Recon module")
+            manual_recon(domain)
+
+            print("[+] Summary module")
+            summary_scan(domain)
+
+        print("\n[OK] Full workflow complete")
+
+    # -------------------
+    # PLACEHOLDERS
+    # -------------------
+    #
+    # elif cmd == "cloud":
+    #     pass
+
+    else:
+        print(f"Unknown command: {cmd}")
+
+
+if __name__ == "__main__":
+    main()
